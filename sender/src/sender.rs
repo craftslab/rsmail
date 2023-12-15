@@ -37,4 +37,5 @@ fn parse_config(file_location: &str) -> Result<Config, Box<dyn std::error::Error
     Ok(config)
 }
 
-// and other functions
+// TODO: FIXME
+// msg.Attach(item, mail.Rename(mime.QEncoding.Encode("utf-8", filepath.Base(item))))
