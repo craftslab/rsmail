@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::Read;
 
 use clap::{Arg, Command};
-use ldap3::{LdapConn, Scope, SearchEntry};
+use ldap3::{LdapConn, LdapConnSettings, Scope, SearchEntry};
 
 #[derive(serde_derive::Deserialize)]
 struct Config {
@@ -86,7 +86,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cc = fetch_address(&config, cc)?;
     let to = fetch_address(&config, to)?;
 
-    print_address(cc, to, &filter);
+    print_address(cc, to, filter);
 
     Ok(())
 }
@@ -110,6 +110,8 @@ fn parse_filter(config: &Config, data: String) -> Result<Vec<String>, Box<dyn Er
         }
     }
 
+    buf = remove_duplicates(buf);
+
     Ok(buf)
 }
 
@@ -130,78 +132,136 @@ fn parse_recipients(config: &Config, data: String) -> (Vec<String>, Vec<String>)
         }
     }
 
-    (remove_duplicates(cc), remove_duplicates(to))
+    cc = remove_duplicates(cc);
+    to = remove_duplicates(to);
+    cc = collect_difference(cc, to.to_owned());
+
+    return (cc, to);
 }
 
 fn fetch_address(config: &Config, data: Vec<String>) -> Result<Vec<String>, Box<dyn Error>> {
-    let ldap_url = format!("ldap://{}:{}", config.host, config.port);
-    let mut addr: String;
-    let mut filter: String;
-    let mut ldap = LdapConn::new(&ldap_url)?;
-    let mut result: Vec<String> = vec![];
+    let fetch = |data: String| -> String {
+        let buf: Vec<&str> = data.split("@").collect();
+        if buf.len() == 0 {
+            "".to_string();
+        }
+        buf[0].to_string()
+    };
 
-    ldap.simple_bind(&config.user, &config.pass)?;
+    let query = |filter: &str, data: String| -> Result<String, Box<dyn Error>> {
+        let mut ldap: LdapConn = LdapConn::with_settings(
+            LdapConnSettings::new()
+                .set_no_tls_verify(true)
+                .set_starttls(true),
+            &format!("ldap://{}:{}", config.host, config.port),
+        )?;
+        ldap.simple_bind(&config.user, &config.pass)?;
+        let (entry, _res) = ldap
+            .search(
+                &config.base,
+                Scope::Subtree,
+                &format!("(&({}={}))", filter, data),
+                vec!["*"],
+            )?
+            .success()?;
+        if entry.len() == 0 {
+            return Err(Box::from("failed to search"));
+        }
+        let buf = SearchEntry::construct(entry[0].to_owned())
+            .attrs
+            .get("mail")
+            .and_then(|ary| ary.first())
+            .map(String::from);
+        ldap.unbind()?;
+        Ok(buf.unwrap())
+    };
+
+    let mut buf: Vec<String> = vec![];
 
     for item in data {
-        if item.contains("@") {
-            addr = String::from(item.clone());
-            filter = format!("(&(mail={}))", item.clone());
-        } else {
-            addr = format!("{}@example.com", item.clone());
-            filter = format!("(&(sAMAccountName={}))", item.clone());
-        };
-        let (rs, _res) = ldap
-            .search(&config.base, Scope::Subtree, &filter, vec!["mail"])?
-            .success()?;
-        for entry in rs {
-            let mail = SearchEntry::construct(entry)
-                .attrs
-                .get("mail")
-                .and_then(|ary| ary.first())
-                .map(String::from);
-            if mail.is_some() {
-                result.push(mail.unwrap());
-            } else {
-                result.push(addr.clone());
+        let mut addr = query("mail", item.to_owned())?;
+        if addr.is_empty() {
+            let a = query("sAMAccountName", fetch(item.to_owned()))?;
+            if !a.is_empty() {
+                addr = a;
             }
         }
-        ldap.unbind()?;
+        if !addr.is_empty() {
+            buf.push(addr.to_owned())
+        }
     }
 
-    Ok(result)
+    Ok(buf)
 }
 
-fn print_address(cc: Vec<String>, to: Vec<String>, filter: &Vec<String>) {
-    let cc = filter_addresses(remove_duplicates(cc), filter);
-    let to = filter_addresses(remove_duplicates(to), filter);
+fn print_address(cc: Vec<String>, to: Vec<String>, filter: Vec<String>) {
+    let mut cc = remove_duplicates(cc);
+    let to = remove_duplicates(to);
 
-    for address in &to {
-        print!("{},", address);
+    cc = collect_difference(cc, to.to_owned());
+
+    for item in to {
+        if let Ok(()) = filter_address(item.to_owned(), filter.to_owned()) {
+            print!("{},", item);
+        }
     }
 
-    if !cc.is_empty() {
-        for i in 0..cc.len() - 2 {
+    if cc.is_empty() {
+        return;
+    }
+
+    for i in 0..cc.len() - 1 {
+        if let Ok(()) = filter_address(cc[i].to_owned(), filter.to_owned()) {
             print!("cc:{},", cc[i]);
         }
-
-        print!("cc:{}", cc[cc.len() - 1]);
     }
 
-    println!();
+    if let Ok(()) = filter_address(cc[cc.len() - 1].to_owned(), filter.to_owned()) {
+        println!("cc:{}", cc[cc.len() - 1]);
+    }
 }
 
 fn remove_duplicates(data: Vec<String>) -> Vec<String> {
-    let mut v = Vec::new();
+    let mut buf = Vec::new();
+
     for item in data {
-        if !v.contains(&item) {
-            v.push(item);
+        if !buf.contains(&item) {
+            buf.push(item);
         }
     }
-    v
+
+    return buf;
 }
 
-fn filter_addresses(data: Vec<String>, filter: &Vec<String>) -> Vec<String> {
-    data.into_iter()
-        .filter(|item| filter.iter().any(|filter| item.ends_with(filter)))
-        .collect()
+fn collect_difference(data: Vec<String>, other: Vec<String>) -> Vec<String> {
+    let mut buf = Vec::new();
+
+    for item in other {
+        if !buf.contains(&item) {
+            buf.push(item);
+        }
+    }
+
+    for item in data {
+        if !buf.contains(&item) {
+            buf.push(item);
+        }
+    }
+
+    return buf;
+}
+
+fn filter_address(data: String, filter: Vec<String>) -> Result<(), Box<dyn Error>> {
+    let mut res = Err("filter failed".into());
+
+    for item in filter {
+        if data.ends_with(item.as_str()) {
+            if data != item {
+                res = Ok(());
+            }
+            break;
+        }
+    }
+
+    return res;
 }
