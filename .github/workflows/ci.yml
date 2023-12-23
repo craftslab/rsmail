@@ -27,8 +27,11 @@ jobs:
           rustup component add clippy
           rustup component add rustfmt
           cargo install cargo-hack --debug
-      - name: Run
-        run: make lint
+      - name: Run parser
+        run: cd parser; make lint
+        continue-on-error: false
+      - name: Run sender
+        run: cd sender; make lint
         continue-on-error: false
   test:
     name: Test
@@ -43,6 +46,9 @@ jobs:
           rustup update --no-self-update stable
           sudo apt-get update
           sudo apt-get install -y inxi
-      - name: Run
-        run: make test
+      - name: Run parser
+        run: cd parser; make test
+        continue-on-error: false
+      - name: Run sender
+        run: cd sender; make test
         continue-on-error: false

@@ -1,50 +1,38 @@
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [package]
-name = "metalmetrics"
-version = "1.14.0"
+name = "sender"
+version = "1.0.0"
 edition = "2021"
-rust-version = "1.59"
+rust-version = "1.74.1"
 authors = ["Jia Jia <angersax@sina.com>"]
 include = [
     "src/**/*",
-    "Cargo.toml",
-    "README.md"
+    "Cargo.toml"
 ]
-description = "Metal metrics in Rust"
-repository = "https://github.com/devops-metalflow/metalmetrics"
-documentation = "https://github.com/devops-metalflow/metalmetrics"
-homepage = "https://github.com/devops-metalflow/metalmetrics"
-keywords = ["metal", "metrics", "rust"]
-categories = ["metrics"]
-license = "MIT"
-readme = "README.md"
-build = "src/flow/build.rs"
+description = "mail sender"
+repository = "https://github.com/craftslab/rsmail"
+documentation = "https://github.com/craftslab/rsmail"
+homepage = "https://github.com/craftslab/rsmail"
+keywords = ["mail", "sender", "rust"]
+categories = ["mail"]
+license = "Apache-2.0"
+readme = "../README.md"
 
 [[bin]]
-name = "metalmetrics"
-path = "src/main.rs"
+name = "sender"
+path = "src/sender.rs"
 
 [profile.release]
 strip = "debuginfo"
 
 [dependencies]
-clap = "3.0.0-beta.4"
-futures = "0.3.17"
-futures-timer = "3.0.2"
-heim = { version = "0.1.0-rc.1", features = ["cpu", "disk", "host", "memory", "net"] }
-prost = "0.9.0"
-serde = "1.0"
-serde_derive = "1.0"
-serde_json = "1.0.59"
-serde_yaml = "0.8"
-smol = "1.2.5"
-sysinfo = "0.27.7"
-tokio = {version = "1.12.0", features = ["rt-multi-thread"]}
-tonic = "0.6.1"
-
-[build-dependencies]
-tonic-build = "0.6.0"
+clap = "4.4.11"
+ldap3 = "0.11.3"
+openssl = { version = "0.10.62", features = ["vendored"] }
+serde = "1.0.193"
+serde_derive = "1.0.193"
+serde_json = "1.0.108"
 
 [badges]
 maintenance = { status = "actively-developed" }

@@ -2,11 +2,8 @@
 
 build=$(date +%FT%T%z)
 
-parser-linux="target/x86_64-unknown-linux-musl/release/parser"
-parser-windows="target/x86_64-pc-windows-gnu/release/parser.exe"
-
-sender-linux="target/x86_64-unknown-linux-musl/release/sender"
-sender-windows="target/x86_64-pc-windows-gnu/release/sender.exe"
+target_linux="target/x86_64-unknown-linux-musl/release/parser"
+target_windows="target/x86_64-pc-windows-gnu/release/parser.exe"
 
 if [ "$1" = "all" ]; then
   build=$build cargo build --release --all-features --all-targets --target=x86_64-pc-windows-gnu
@@ -20,5 +17,5 @@ else
   build=$build cargo build --release --all-features --all-targets --target=x86_64-unknown-linux-musl
 fi
 
-if [ -f $linux ]; then upx $linux; fi
-if [ -f $windows ]; then upx $windows; fi
+if [ -f "${target_linux}" ]; then upx "${target_linux}"; fi
+if [ -f "${target_windows}" ]; then upx "${target_windows}"; fi

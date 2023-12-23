@@ -1,27 +1,26 @@
-# gomail
+# rsmail
 
-[![Actions Status](https://github.com/craftslab/gomail/workflows/CI/badge.svg?branch=master&event=push)](https://github.com/craftslab/gomail/actions?query=workflow%3ACI)
-[![Go Report Card](https://goreportcard.com/badge/github.com/craftslab/gomail)](https://goreportcard.com/report/github.com/craftslab/gomail)
-[![License](https://img.shields.io/github/license/craftslab/gomail.svg?color=brightgreen)](https://github.com/craftslab/gomail/blob/master/LICENSE)
-[![Tag](https://img.shields.io/github/tag/craftslab/gomail.svg?color=brightgreen)](https://github.com/craftslab/gomail/tags)
+[![Actions Status](https://github.com/craftslab/rsmail/workflows/CI/badge.svg?branch=main&event=push)](https://github.com/craftslab/rsmail/actions?query=workflow%3ACI)
+[![License](https://img.shields.io/github/license/craftslab/rsmail.svg?color=brightgreen)](https://github.com/craftslab/rsmail/blob/main/LICENSE)
+[![Tag](https://img.shields.io/github/tag/craftslab/rsmail.svg?color=brightgreen)](https://github.com/craftslab/rsmail/tags)
 
 
 
 ## Introduction
 
-*gomail* is a mail sender written in Go.
+*rsmail* is a mail sender written in Rust.
 
 
 
 ## Prerequisites
 
-- Go >= 1.16.0
+- Rust >= 1.74.0
 
 
 
 ## Features
 
-*gomail* supports:
+*rsmail* supports:
 
 - Attachments
 - HTML and text templates
@@ -31,9 +30,18 @@
 ## Build
 
 ```bash
-git clone https://github.com/craftslab/gomail.git
+git clone https://github.com/craftslab/rsmail.git
 
-cd gomail
+cd rsmail/parser
+make install
+make build
+```
+
+```bash
+git clone https://github.com/craftslab/rsmail.git
+
+cd rsmail/sender
+make install
 make build
 ```
 
@@ -64,37 +72,18 @@ make build
 ## Usage
 
 ```bash
-usage: parser --recipients=RECIPIENTS [<flags>]
+Usage: parser --config <NAME> --filter <LIST> --recipients <LIST>
 
-Recipient parser
-
-Flags:
-      --help                   Show context-sensitive help (also try --help-long
-                               and --help-man).
-      --version                Show application version.
-  -c, --config=CONFIG          Config file, format: .json
-  -f, --filter=FILTER          Filter list, format: @example1.com,@example2.com
-  -r, --recipients=RECIPIENTS  Recipients list, format: alen,cc:bob@example.com
+Options:
+  -c, --config <NAME>      Config file (.json)
+  -f, --filter <LIST>      Filter list (@example1.com,@example2.com)
+  -r, --recipients <LIST>  Recipients list (alen,cc:bob@example.com
+  -h, --help               Print help
+  -V, --version            Print version
 ```
 
 ```bash
-usage: sender --recipients=RECIPIENTS [<flags>]
-
-Mail sender
-
-Flags:
-      --help                     Show context-sensitive help (also try
-                                 --help-long and --help-man).
-      --version                  Show application version.
-  -a, --attachment=ATTACHMENT    Attachment files, format: attach1,attach2,...
-  -b, --body=BODY                Body text or file
-  -c, --config=CONFIG            Config file, format: .json
-  -e, --content_type=PLAIN_TEXT  Content type, format: HTML or PLAIN_TEXT
-                                 (default)
-  -r, --header=HEADER            Header text
-  -p, --recipients=RECIPIENTS    Recipients list, format:
-                                 alen@example.com,cc:bob@example.com
-  -t, --title=TITLE              Title text
+TBD
 ```
 
 

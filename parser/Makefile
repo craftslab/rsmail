@@ -1,8 +1,3 @@
-# Config
-
-VERSION=$(version)
-
-
 # Build
 
 .PHONY: FORCE
@@ -26,7 +21,7 @@ test: rs-test
 # Non-PHONY targets (real files)
 
 rs-build: FORCE
-	./scripts/build.sh $(VERSION)
+	./scripts/build.sh
 
 rs-clean: FORCE
 	./scripts/clean.sh

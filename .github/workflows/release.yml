@@ -20,10 +20,17 @@ jobs:
           override: true
       - name: Install
         run: make install
-      - name: Build
-        run: make build
-      - name: Upload
+      - name: Build parser
+        run: cd parser; make build
+      - name: Build sender
+        run: cd sender; make build
+      - name: Upload parser
         uses: actions/upload-artifact@v2
         with:
-          name: ${{ github.event.repository.name }}
-          path: target/x86_64-unknown-linux-musl/release/${{ github.event.repository.name }}
+          name: parser-x86_64-unknown-linux-musl
+          path: parser/target/x86_64-unknown-linux-musl/release/parser
+      - name: Upload sender
+        uses: actions/upload-artifact@v2
+        with:
+          name: sender-x86_64-unknown-linux-musl
+          path: sender/target/x86_64-unknown-linux-musl/release/sender

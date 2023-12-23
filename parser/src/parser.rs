@@ -12,17 +12,13 @@
 
 extern crate clap;
 extern crate ldap3;
-extern crate openssl;
 
-use std::fs::File;
-use std::env;
 use std::error::Error;
+use std::fs::File;
 use std::io::Read;
 
-use clap::{Arg, App};
-use ldap3::{LdapConn, Scope};
-use openssl::ssl::SslConnectorBuilder;
-use openssl::ssl::SslMethod;
+use clap::{Arg, Command};
+use ldap3::{LdapConn, Scope, SearchEntry};
 
 #[derive(serde_derive::Deserialize)]
 struct Config {
@@ -35,26 +31,55 @@ struct Config {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let app = App::new("parser")
-        .version("2.0.7")
+    let app = Command::new("recipient parser")
+        .version("1.0.0")
         .author("Jia Jia")
-        .arg(Arg::with_name("config")
-            .short("c")
-            .takes_value(true)
-            .required(true))
-        .arg(Arg::with_name("filter")
-            .short("f")
-            .takes_value(true))
-        .arg(Arg::with_name("recipients")
-            .short("r")
-            .takes_value(true)
-            .required(true))
+        .arg(
+            Arg::new("config")
+                .long("config")
+                .short('c')
+                .value_name("NAME")
+                .help("Config file (.json)")
+                .required(true),
+        )
+        .arg(
+            Arg::new("filter")
+                .long("filter")
+                .short('f')
+                .value_name("LIST")
+                .help("Filter list (@example1.com,@example2.com)")
+                .required(true),
+        )
+        .arg(
+            Arg::new("recipients")
+                .long("recipients")
+                .short('r')
+                .value_name("LIST")
+                .help("Recipients list (alen,cc:bob@example.com")
+                .required(true),
+        )
         .get_matches();
-    let config_name = app.value_of("config").unwrap().to_string();
-    let filter_list = app.value_of("filter").unwrap_or("@example1.com,@example2.com").to_string();
-    let recipients_list = app.value_of("recipients").unwrap().to_string();
 
-    let config = parse_config(config_name)?;
+    let config_file: String;
+    let filter_list: String;
+    let recipients_list: String;
+
+    match app.get_one::<String>("config") {
+        Some(name) => config_file = name.to_string(),
+        None => config_file = "".to_string(),
+    }
+
+    match app.get_one::<String>("filter_list") {
+        Some(list) => filter_list = list.to_string(),
+        None => filter_list = "".to_string(),
+    }
+
+    match app.get_one::<String>("recipients_list") {
+        Some(list) => recipients_list = list.to_string(),
+        None => recipients_list = "".to_string(),
+    }
+
+    let config = parse_config(config_file)?;
     let filter = parse_filter(&config, filter_list)?;
     let (cc, to) = parse_recipients(&config, recipients_list);
 
@@ -75,7 +100,17 @@ fn parse_config(name: String) -> Result<Config, Box<dyn Error>> {
 }
 
 fn parse_filter(config: &Config, data: String) -> Result<Vec<String>, Box<dyn Error>> {
-    Ok(data.split(&config.sep).filter(|item| !item.is_empty()).collect())
+    let mut buf: Vec<String> = vec![];
+
+    for item in data.split(&config.sep) {
+        if !item.is_empty() {
+            if item.starts_with("@") {
+                buf.push(item.to_string());
+            }
+        }
+    }
+
+    Ok(buf)
 }
 
 fn parse_recipients(config: &Config, data: String) -> (Vec<String>, Vec<String>) {
@@ -99,33 +134,38 @@ fn parse_recipients(config: &Config, data: String) -> (Vec<String>, Vec<String>)
 }
 
 fn fetch_address(config: &Config, data: Vec<String>) -> Result<Vec<String>, Box<dyn Error>> {
-    let mut result = Vec::new();
     let ldap_url = format!("ldap://{}:{}", config.host, config.port);
-    let connector = SslConnectorBuilder::new(SslMethod::tls()).unwrap().build();
-    let mut ldap = LdapConn::new(&ldap_url, connector)?;
+    let mut addr: String;
+    let mut filter: String;
+    let mut ldap = LdapConn::new(&ldap_url)?;
+    let mut result: Vec<String> = vec![];
 
     ldap.simple_bind(&config.user, &config.pass)?;
 
     for item in data {
-        let (search_filter, addr) = if item.contains("@") {
-            let search_filter = format!("(&(mail={}))", item);
-            let addr = String::from(item);
-            (search_filter, addr)
+        if item.contains("@") {
+            addr = String::from(item.clone());
+            filter = format!("(&(mail={}))", item.clone());
         } else {
-            let search_filter = format!("(&(sAMAccountName={}))", item);
-            let addr = format!("{}@example.com", item);
-            (search_filter, addr)
+            addr = format!("{}@example.com", item.clone());
+            filter = format!("(&(sAMAccountName={}))", item.clone());
         };
-        let (result, _res) = ldap.search(&config.base, Scope::Subtree, &search_filter, vec!["mail"])?;
-        let entry = result.into_iter().next();
-        if let Some(entry) = entry {
-            let mail = entry.attrs.get("mail").and_then(|ary| ary.first()).map(String::from);
+        let (rs, _res) = ldap
+            .search(&config.base, Scope::Subtree, &filter, vec!["mail"])?
+            .success()?;
+        for entry in rs {
+            let mail = SearchEntry::construct(entry)
+                .attrs
+                .get("mail")
+                .and_then(|ary| ary.first())
+                .map(String::from);
             if mail.is_some() {
                 result.push(mail.unwrap());
             } else {
-                result.push(addr);
+                result.push(addr.clone());
             }
         }
+        ldap.unbind()?;
     }
 
     Ok(result)
@@ -140,11 +180,11 @@ fn print_address(cc: Vec<String>, to: Vec<String>, filter: &Vec<String>) {
     }
 
     if !cc.is_empty() {
-        for i in 0..cc.len()-2 {
+        for i in 0..cc.len() - 2 {
             print!("cc:{},", cc[i]);
         }
 
-        print!("cc:{}", cc[cc.len()-1]);
+        print!("cc:{}", cc[cc.len() - 1]);
     }
 
     println!();
@@ -161,9 +201,7 @@ fn remove_duplicates(data: Vec<String>) -> Vec<String> {
 }
 
 fn filter_addresses(data: Vec<String>, filter: &Vec<String>) -> Vec<String> {
-    data.into_iter().filter(|item| {
-        filter.iter().any(|filter|
-            item.ends_with(filter)
-        )
-    }).collect()
+    data.into_iter()
+        .filter(|item| filter.iter().any(|filter| item.ends_with(filter)))
+        .collect()
 }
