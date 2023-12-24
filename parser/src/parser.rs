@@ -55,52 +55,48 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .long("recipients")
                 .short('r')
                 .value_name("LIST")
-                .help("Recipients list (alen,cc:bob@example.com")
+                .help("Recipients list (alen,cc:bob@example.com)")
                 .required(true),
         )
         .get_matches();
 
-    let config_file: String;
-    let filter_list: String;
-    let recipients_list: String;
+    let default = "".to_string();
 
-    match app.get_one::<String>("config") {
-        Some(name) => config_file = name.to_string(),
-        None => config_file = "".to_string(),
-    }
-
-    match app.get_one::<String>("filter_list") {
-        Some(list) => filter_list = list.to_string(),
-        None => filter_list = "".to_string(),
-    }
-
-    match app.get_one::<String>("recipients_list") {
-        Some(list) => recipients_list = list.to_string(),
-        None => recipients_list = "".to_string(),
-    }
-
+    let config_file = app.get_one("config").unwrap_or(&default);
     let config = parse_config(config_file)?;
+
+    let filter_list = app.get_one("filter").unwrap_or(&default);
     let filter = parse_filter(&config, filter_list)?;
+
+    let recipients_list = app.get_one("recipients").unwrap_or(&default);
     let (cc, to) = parse_recipients(&config, recipients_list);
+    if cc.len() == 0 && to.len() == 0 {
+        return Err(Box::from("failed to parse recipients"));
+    }
 
     let cc = fetch_address(&config, cc)?;
     let to = fetch_address(&config, to)?;
 
     print_address(cc, to, filter);
 
-    Ok(())
+    return Ok(());
 }
 
-fn parse_config(name: String) -> Result<Config, Box<dyn Error>> {
+fn parse_config(name: &String) -> Result<Config, Box<dyn Error>> {
     let mut file = File::open(name)?;
     let mut data = String::new();
+
     file.read_to_string(&mut data)?;
 
-    serde_json::from_str(data.as_str()).map_err(|e| e.into())
+    return serde_json::from_str(data.as_str()).map_err(|e| e.into());
 }
 
-fn parse_filter(config: &Config, data: String) -> Result<Vec<String>, Box<dyn Error>> {
+fn parse_filter(config: &Config, data: &String) -> Result<Vec<String>, Box<dyn Error>> {
     let mut buf: Vec<String> = vec![];
+
+    if data.is_empty() {
+        return Ok(buf);
+    }
 
     for item in data.split(&config.sep) {
         if !item.is_empty() {
@@ -112,10 +108,10 @@ fn parse_filter(config: &Config, data: String) -> Result<Vec<String>, Box<dyn Er
 
     buf = remove_duplicates(buf);
 
-    Ok(buf)
+    return Ok(buf);
 }
 
-fn parse_recipients(config: &Config, data: String) -> (Vec<String>, Vec<String>) {
+fn parse_recipients(config: &Config, data: &String) -> (Vec<String>, Vec<String>) {
     let mut cc = Vec::new();
     let mut to = Vec::new();
 
@@ -143,9 +139,9 @@ fn fetch_address(config: &Config, data: Vec<String>) -> Result<Vec<String>, Box<
     let fetch = |data: String| -> String {
         let buf: Vec<&str> = data.split("@").collect();
         if buf.len() == 0 {
-            "".to_string();
+            return "".to_string();
         }
-        buf[0].to_string()
+        return buf[0].to_string();
     };
 
     let query = |filter: &str, data: String| -> Result<String, Box<dyn Error>> {
@@ -173,17 +169,19 @@ fn fetch_address(config: &Config, data: Vec<String>) -> Result<Vec<String>, Box<
             .and_then(|ary| ary.first())
             .map(String::from);
         ldap.unbind()?;
-        Ok(buf.unwrap())
+        return Ok(buf.unwrap());
     };
 
     let mut buf: Vec<String> = vec![];
 
     for item in data {
-        let mut addr = query("mail", item.to_owned())?;
-        if addr.is_empty() {
-            let a = query("sAMAccountName", fetch(item.to_owned()))?;
-            if !a.is_empty() {
-                addr = a;
+        let mut addr = "".to_string();
+        match query("mail", item.to_owned()) {
+            Ok(a) => addr = a,
+            Err(_) => {
+                if let Ok(a) = query("sAMAccountName", fetch(item.to_owned())) {
+                    addr = a;
+                }
             }
         }
         if !addr.is_empty() {
@@ -191,7 +189,7 @@ fn fetch_address(config: &Config, data: Vec<String>) -> Result<Vec<String>, Box<
         }
     }
 
-    Ok(buf)
+    return Ok(buf);
 }
 
 fn print_address(cc: Vec<String>, to: Vec<String>, filter: Vec<String>) {
@@ -235,15 +233,16 @@ fn remove_duplicates(data: Vec<String>) -> Vec<String> {
 
 fn collect_difference(data: Vec<String>, other: Vec<String>) -> Vec<String> {
     let mut buf = Vec::new();
+    let mut key = Vec::new();
 
     for item in other {
-        if !buf.contains(&item) {
-            buf.push(item);
+        if !key.contains(&item) {
+            key.push(item);
         }
     }
 
     for item in data {
-        if !buf.contains(&item) {
+        if !key.contains(&item) {
             buf.push(item);
         }
     }

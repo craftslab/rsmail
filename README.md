@@ -77,7 +77,7 @@ Usage: parser --config <NAME> --filter <LIST> --recipients <LIST>
 Options:
   -c, --config <NAME>      Config file (.json)
   -f, --filter <LIST>      Filter list (@example1.com,@example2.com)
-  -r, --recipients <LIST>  Recipients list (alen,cc:bob@example.com
+  -r, --recipients <LIST>  Recipients list (alen,cc:bob@example.com)
   -h, --help               Print help
   -V, --version            Print version
 ```
