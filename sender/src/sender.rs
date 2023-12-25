@@ -10,45 +10,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
+extern crate clap;
+
+use std::collections::HashMap;
+use std::env;
+use std::error::Error;
 use std::fs;
+use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 
-use lettre::message::Mailbox;
+use clap::{Arg, Command};
+use lettre::message::{header::ContentType, Attachment, Mailbox};
 use lettre::{Message, SmtpTransport, Transport};
-use lettre_email::EmailBuilder;
-use mime::Mime;
-use thiserror::Error;
 
-#[derive(Debug, Error)]
-pub enum MailError {
-    #[error("send failed: {0}")]
-    SendFailed(lettre::smtp::error::Error),
-    #[error("file invalid")]
-    FileInvalid,
-    #[error("lstat failed: {0}")]
-    LstatFailed(std::io::Error),
+#[derive(serde_derive::Deserialize)]
+struct Config {
+    host: String,
+    pass: String,
+    port: u16,
+    sender: String,
+    sep: String,
+    user: String,
 }
 
-pub struct Config {
-    pub sep: char,
-    pub sender: String,
-    pub host: String,
-    pub port: u16,
-    pub user: String,
-    pub pass: String,
+struct Mail {
+    attachment: Vec<String>,
+    body: String,
+    cc: Vec<String>,
+    content_type: String,
+    from: String,
+    subject: String,
+    to: Vec<String>,
 }
 
-pub struct Mail {
-    pub from: String,
-    pub cc: Vec<String>,
-    pub subject: String,
-    pub to: Vec<String>,
-    pub content_type: Mime,
-    pub body: String,
-    pub attachment: Vec<PathBuf>,
-}
+static ContentTypeMap: HashMap<&str, &str> = [("HTML", "text/html"), ("PLAIN_TEXT", "text/plain")];
 
 fn main() -> Result<(), Box<dyn Error>> {
     let app = Command::new("mail sender")
@@ -107,26 +103,93 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
         .get_matches();
 
+    let default = "".to_string();
+
+    let c = app.get_one("config").unwrap_or(&default);
+    let config = parse_config(c)?;
+
+    let a = app.get_one("attachment").unwrap_or(&default);
+    let attachment = parse_attachment(&config, a)?;
+
+    let b = app.get_one("body").unwrap_or(&default);
+    let body = parse_body(b)?;
+
+    let e = app.get_one("content_type").unwrap_or(&default);
+    let content_type = parse_content_type(e)?;
+
+    let header = app.get_one("header").unwrap_or(&default);
+
+    let p = app.get_one("recipients").unwrap_or(&default);
+    let (cc, to) = parse_recipients(&config, p)?;
+    if cc.len() == 0 && to.len() == 0 {
+        return Err(Box::from("failed to parse recipients"));
+    }
+
+    let title = app.get_one("title").unwrap_or(&default);
+
+    let mail = Mail {
+        attachment: attachment,
+        body: body,
+        cc: cc,
+        content_type: content_type,
+        from: header.to_string(),
+        subject: title,
+        to: to,
+    };
+
+    send_mail(&config, &mail)?;
+
     return Ok(());
 }
 
-pub fn parse_config() {
+fn parse_config(name: &String) -> Result<Config, Box<dyn Error>> {
+    let mut file = fs::File::open(name)?;
+    let mut data = String::new();
+
+    file.read_to_string(&mut data)?;
+
+    return serde_json::from_str(data.as_str()).map_err(|e| e.into());
 }
 
-pub fn parse_attachment() {
+fn parse_attachment(config: &Config, name: &String) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut names = Vec::new();
+
+    if name.is_empty() {
+        return Ok(names);
+    }
+
+    let buf = name.split(config.sep).map(|s| s.to_string()).collect();
+    for item in &mut buf {
+        *item = check_file(item)?;
+    }
+
+    return Ok(buf);
 }
 
-pub fn parse_body() {
+fn parse_body(data: &String) -> Result<String, Box<dyn Error>> {
+    let buf = match check_file(&data) {
+        Ok(b) => b,
+        Err(_) => return Ok(data),
+    };
+
+    match fs::read_to_string(&buf) {
+        Ok(b) => Ok(b),
+        Err(e) => Err(e),
+    }
 }
 
-pub fn parse_content_type() {
+fn parse_content_type(data: &String) -> Result<String, Box<dyn Error>> {
+    match ContentTypeMap.get(data) {
+        Some(buf) => Ok(buf.to_string()),
+        None => Err("content type invalid".into()),
+    }
 }
 
-pub fn parse_recipients(config: &Config, data: &str) -> (Vec<String>, Vec<String>) {
-    let mut cc = vec![];
-    let mut to = vec![];
+fn parse_recipients(config: &Config, data: &String) -> (Vec<String>, Vec<String>) {
+    let mut cc: Vec<String> = Vec::new();
+    let mut to: Vec<String> = Vec::new();
 
-    for item in data.split(config.sep) {
+    for item in data.split(&config.sep) {
         if !item.is_empty() {
             if item.starts_with("cc:") {
                 let buf = item.replace("cc:", "");
@@ -143,52 +206,110 @@ pub fn parse_recipients(config: &Config, data: &str) -> (Vec<String>, Vec<String
     to = remove_duplicates(to);
     cc = collect_difference(cc, to);
 
-    (cc, to)
+    return (cc, to);
 }
 
-pub fn send_mail(config: &Config, data: &Mail) -> Result<(), MailError> {
-    let mut email = EmailBuilder::new()
-        .to(data.to.clone())
-        .from((config.sender.clone(), data.from.clone()))
-        .subject(data.subject.clone())
-        .header(("Content-Type", data.content_type.clone()))
-        .body(data.body.clone())
-        .build()
+fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
+    let mut email = Message::builder()
+        .from(config.sender.parse()?)
+        .to(mail
+            .to
+            .iter()
+            .map(|to| Mailbox::new(None, to.parse().unwrap()))
+            .collect::<Vec<_>>())
+        .cc(mail
+            .cc
+            .iter()
+            .map(|cc| Mailbox::new(None, cc.parse().unwrap()))
+            .collect::<Vec<_>>())
+        .subject(&mail.subject)
+        .body(mail.body.clone())
         .unwrap();
 
-    for item in &data.attachment {
-        email = email.attachment(item, None, &mime::APPLICATION_OCTET_STREAM).unwrap();
+    for item in &mail.attachment {
+        let filename = Path::new(item).file_name()?;
+        let filebody = fs::read(item)?;
+        let t = item.content_type.parse().unwrap();
+        let content_type = ContentType::parse(t).unwrap();
+        let attachment = Attachment::new(filename).body(filebody, content_type);
+
+        email.add_attachment(attachment);
     }
+
+    let creds = lettre::transport::smtp::authentication::Credentials::new(
+        config.user.clone(),
+        config.pass.clone(),
+    );
 
     let mailer = SmtpTransport::relay(&config.host)
         .unwrap()
         .port(config.port)
-        .credentials(lettre::smtp::authentication::Credentials::new(
-            config.user.clone(),
-            config.pass.clone(),
-        ))
+        .credentials(creds)
         .build();
 
-    mailer.send(&email).map_err(MailError::SendFailed)
+    return mailer.send(&email);
 }
 
-pub fn check_file(name: &str) -> Result<String, MailError> {
-    let path = Path::new(name);
-    let metadata = fs::metadata(path).map_err(MailError::LstatFailed)?;
+fn check_file(name: &String) -> Result<String, Box<dyn Error>> {
+    let mut buf = name.to_string();
 
-    if !metadata.is_file() {
-        return Err(MailError::FileInvalid);
+    let metadata = fs::metadata(&name);
+    match metadata {
+        Ok(md) => {
+            if md.is_file() {
+                Ok(buf)
+            } else {
+                Err(io::Error::new(io::ErrorKind::Other, "file invalid"))
+            }
+        }
+        Err(_) => {
+            let root = env::current_dir()?;
+            let fullname = root.join(name);
+            match fs::metadata(&fullname) {
+                Ok(md) => {
+                    if md.is_file() {
+                        buf = fullname.to_str().unwrap().to_string();
+                        Ok(buf)
+                    } else {
+                        Err(io::Error::new(io::ErrorKind::Other, "file invalid"))
+                    }
+                }
+                Err(e) => Err(e),
+            }
+        }
+    }
+}
+
+fn remove_duplicates(data: Vec<String>) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut buf = Vec::new();
+
+    for item in data {
+        if !buf.contains(&item) {
+            buf.push(item);
+        }
     }
 
-    Ok(name.to_string())
+    return buf;
 }
 
-fn remove_duplicates(data: Vec<String>) -> Vec<String> {
-    let set: HashSet<_> = data.into_iter().collect();
-    set.into_iter().collect()
-}
+fn collect_difference(
+    data: Vec<String>,
+    other: Vec<String>,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut buf = Vec::new();
+    let mut key = Vec::new();
 
-fn collect_difference(data: Vec<String>, other: Vec<String>) -> Vec<String> {
-    let set: HashSet<_> = other.into_iter().collect();
-    data.into_iter().filter(|x| !set.contains(x)).collect()
+    for item in other {
+        if !key.contains(&item) {
+            key.push(item);
+        }
+    }
+
+    for item in data {
+        if !key.contains(&item) {
+            buf.push(item);
+        }
+    }
+
+    return buf;
 }

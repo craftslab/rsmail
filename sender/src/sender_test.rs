@@ -16,10 +16,30 @@ use std::io::Read;
 
 #[test]
 fn test_parse_config() {
+    match parse_config("../config/sender.json") {
+        Ok(_) => (),
+        Err(_) => panic!("FAIL"),
+    }
 }
 
 #[test]
 fn test_parse_attachment() {
+    config, err := parseConfig("../config/sender.json")
+    if err != nil {
+        t.Error("FAIL")
+    }
+
+    if _, err := parseAttachment(&config, ""); err != nil {
+        t.Error("FAIL")
+    }
+
+    if _, err := parseAttachment(&config, "attach1.txt,attach2.txt"); err == nil {
+        t.Error("FAIL")
+    }
+
+    if _, err := parseAttachment(&config, "../test/attach1.txt,../test/attach2.txt"); err != nil {
+        t.Error("FAIL")
+    }    
 }
 
 #[test]
