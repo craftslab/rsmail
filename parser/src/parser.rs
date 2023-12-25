@@ -60,20 +60,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let default = "".to_string();
 
-    let config_file = app.get_one("config").unwrap_or(&default);
-    let config = parse_config(config_file)?;
+    let c = app.get_one("config").unwrap_or(&default);
+    let config = parse_config(c)?;
 
-    let filter_list = app.get_one("filter").unwrap_or(&default);
-    let filter = parse_filter(&config, filter_list)?;
+    let f = app.get_one("filter").unwrap_or(&default);
+    let filter = parse_filter(&config, f)?;
 
-    let recipients_list = app.get_one("recipients").unwrap_or(&default);
-    let (cc, to) = parse_recipients(&config, recipients_list);
+    let r = app.get_one("recipients").unwrap_or(&default);
+    let (mut cc, mut to) = parse_recipients(&config, r);
     if cc.len() == 0 && to.len() == 0 {
         return Err(Box::from("failed to parse recipients"));
     }
 
-    let cc = fetch_address(&config, cc)?;
-    let to = fetch_address(&config, to)?;
+    cc = fetch_address(&config, cc)?;
+    to = fetch_address(&config, to)?;
 
     print_address(cc, to, filter);
 
