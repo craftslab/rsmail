@@ -27,6 +27,17 @@
 
 
 
+## Config
+
+```bash
+bash -c "cat >> ~/.cargo/config" << EOF
+[http]
+proxy = "host:port"
+EOF
+```
+
+
+
 ## Build
 
 ```bash
@@ -91,3 +102,10 @@ TBD
 ## License
 
 Project License can be found [here](LICENSE).
+
+
+
+## Reference
+
+- [gomail](https://github.com/craftslab/gomail)
+- [rsproxy](https://rsproxy.cn/)
