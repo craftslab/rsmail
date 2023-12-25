@@ -14,6 +14,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
+
 use lettre::message::Mailbox;
 use lettre::{Message, SmtpTransport, Transport};
 use lettre_email::EmailBuilder;
@@ -47,6 +48,78 @@ pub struct Mail {
     pub content_type: Mime,
     pub body: String,
     pub attachment: Vec<PathBuf>,
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let app = Command::new("mail sender")
+        .version("1.0.0")
+        .author("Jia Jia")
+        .arg(
+            Arg::new("attachment")
+                .long("attachment")
+                .short('a')
+                .value_name("NAME")
+                .help("Attachment files (attach1,attach2)"),
+        )
+        .arg(
+            Arg::new("body")
+                .long("body")
+                .short('b')
+                .value_name("TEXT_OR_NAME")
+                .help("Body text or file"),
+        )
+        .arg(
+            Arg::new("config")
+                .long("config")
+                .short('c')
+                .value_name("NAME")
+                .help("Config file (.json)"),
+        )
+        .arg(
+            Arg::new("content_type")
+                .long("content_type")
+                .short('e')
+                .default_value("PLAIN_TEXT")
+                .value_name("TYPE")
+                .help("Content type (HTML or PLAIN_TEXT)"),
+        )
+        .arg(
+            Arg::new("header")
+                .long("header")
+                .short('r')
+                .value_name("TEXT")
+                .help("Header text"),
+        )
+        .arg(
+            Arg::new("recipients")
+                .long("recipients")
+                .short('p')
+                .value_name("LIST")
+                .help("Recipients list (alen@example.com,cc:bob@example.com)")
+                .required(true),
+        )
+        .arg(
+            Arg::new("title")
+                .long("title")
+                .short('t')
+                .value_name("TEXT")
+                .help("Title text"),
+        )
+        .get_matches();
+
+    return Ok(());
+}
+
+pub fn parse_config() {
+}
+
+pub fn parse_attachment() {
+}
+
+pub fn parse_body() {
+}
+
+pub fn parse_content_type() {
 }
 
 pub fn parse_recipients(config: &Config, data: &str) -> (Vec<String>, Vec<String>) {

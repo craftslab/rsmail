@@ -15,6 +15,14 @@ use std::fs::File;
 use std::io::Read;
 
 #[test]
+fn test_parse_config() {
+}
+
+#[test]
+fn test_parse_attachment() {
+}
+
+#[test]
 fn test_parse_body() {
     assert!(parse_body("../test/body.txt").is_ok());
 }
