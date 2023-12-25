@@ -16,13 +16,11 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::fs;
-use std::io;
-use std::path::Path;
-use std::path::PathBuf;
+use std::io::Read;
 
 use clap::{Arg, Command};
 use lettre::message::{header::ContentType, Attachment, Mailbox};
-use lettre::{Message, SmtpTransport, Transport};
+use lettre::{Address, Message, SmtpTransport, Transport};
 
 #[derive(serde_derive::Deserialize)]
 struct Config {
@@ -44,7 +42,7 @@ struct Mail {
     to: Vec<String>,
 }
 
-static ContentTypeMap: HashMap<&str, &str> = [("HTML", "text/html"), ("PLAIN_TEXT", "text/plain")];
+static CONTENT_TYPE_MAP: HashMap<&str, &str> = HashMap::from([("HTML", "text/html"), ("PLAIN_TEXT", "text/plain")]);
 
 fn main() -> Result<(), Box<dyn Error>> {
     let app = Command::new("mail sender")
@@ -128,13 +126,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let title = app.get_one("title").unwrap_or(&default);
 
     let mail = Mail {
-        attachment: attachment,
-        body: body,
-        cc: cc,
-        content_type: content_type,
+        attachment,
+        body,
+        cc,
+        content_type,
         from: header.to_string(),
-        subject: title,
-        to: to,
+        subject: title.into_string(),
+        to,
     };
 
     send_mail(&config, &mail)?;
@@ -152,13 +150,13 @@ fn parse_config(name: &String) -> Result<Config, Box<dyn Error>> {
 }
 
 fn parse_attachment(config: &Config, name: &String) -> Result<Vec<String>, Box<dyn Error>> {
-    let mut names = Vec::new();
+    let names = Vec::new();
 
     if name.is_empty() {
         return Ok(names);
     }
 
-    let buf = name.split(config.sep).map(|s| s.to_string()).collect();
+    let mut buf = name.split(config.sep.to_owned()).map(|s| s.to_string()).collect();
     for item in &mut buf {
         *item = check_file(item)?;
     }
@@ -169,17 +167,17 @@ fn parse_attachment(config: &Config, name: &String) -> Result<Vec<String>, Box<d
 fn parse_body(data: &String) -> Result<String, Box<dyn Error>> {
     let buf = match check_file(&data) {
         Ok(b) => b,
-        Err(_) => return Ok(data),
+        Err(_) => return Ok(data.to_string()),
     };
 
     match fs::read_to_string(&buf) {
         Ok(b) => Ok(b),
-        Err(e) => Err(e),
+        Err(e) => Err(Box::try_from(e).unwrap()),
     }
 }
 
 fn parse_content_type(data: &String) -> Result<String, Box<dyn Error>> {
-    match ContentTypeMap.get(data) {
+    match CONTENT_TYPE_MAP.get(data) {
         Some(buf) => Ok(buf.to_string()),
         None => Err("content type invalid".into()),
     }
@@ -210,6 +208,7 @@ fn parse_recipients(config: &Config, data: &String) -> (Vec<String>, Vec<String>
 }
 
 fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
+    // TODO: FIXME
     let mut email = Message::builder()
         .from(config.sender.parse()?)
         .to(mail
@@ -226,12 +225,12 @@ fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
         .body(mail.body.clone())
         .unwrap();
 
+    let t = mail.content_type.parse().unwrap();
+    let content_type = ContentType::parse(t).unwrap();
+
     for item in &mail.attachment {
-        let filename = Path::new(item).file_name()?;
-        let filebody = fs::read(item)?;
-        let t = item.content_type.parse().unwrap();
-        let content_type = ContentType::parse(t).unwrap();
-        let attachment = Attachment::new(filename).body(filebody, content_type);
+        let body = fs::read(item)?;
+        let attachment = Attachment::new((*item.into_string()).body(body, content_type.to_owned());
 
         email.add_attachment(attachment);
     }
@@ -259,7 +258,7 @@ fn check_file(name: &String) -> Result<String, Box<dyn Error>> {
             if md.is_file() {
                 Ok(buf)
             } else {
-                Err(io::Error::new(io::ErrorKind::Other, "file invalid"))
+                Err(Box::try_from("file invalid").unwrap())
             }
         }
         Err(_) => {
@@ -271,16 +270,16 @@ fn check_file(name: &String) -> Result<String, Box<dyn Error>> {
                         buf = fullname.to_str().unwrap().to_string();
                         Ok(buf)
                     } else {
-                        Err(io::Error::new(io::ErrorKind::Other, "file invalid"))
+                        Err(Box::try_from("file invalid").unwrap())
                     }
                 }
-                Err(e) => Err(e),
+                Err(e) => Err(Box::try_from(e).unwrap()),
             }
         }
     }
 }
 
-fn remove_duplicates(data: Vec<String>) -> Result<Vec<String>, Box<dyn Error>> {
+fn remove_duplicates(data: Vec<String>) -> Vec<String> {
     let mut buf = Vec::new();
 
     for item in data {
@@ -295,7 +294,7 @@ fn remove_duplicates(data: Vec<String>) -> Result<Vec<String>, Box<dyn Error>> {
 fn collect_difference(
     data: Vec<String>,
     other: Vec<String>,
-) -> Result<Vec<String>, Box<dyn Error>> {
+) -> Vec<String> {
     let mut buf = Vec::new();
     let mut key = Vec::new();
 
