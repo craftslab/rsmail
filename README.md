@@ -83,7 +83,7 @@ make build
 ## Usage
 
 ```bash
-Usage: parser --config <NAME> --filter <LIST> --recipients <LIST>
+Usage: parser [OPTIONS] --recipients <LIST>
 
 Options:
   -c, --config <NAME>      Config file (.json)

@@ -39,16 +39,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .long("config")
                 .short('c')
                 .value_name("NAME")
-                .help("Config file (.json)")
-                .required(true),
+                .help("Config file (.json)"),
         )
         .arg(
             Arg::new("filter")
                 .long("filter")
                 .short('f')
                 .value_name("LIST")
-                .help("Filter list (@example1.com,@example2.com)")
-                .required(true),
+                .help("Filter list (@example1.com,@example2.com)"),
         )
         .arg(
             Arg::new("recipients")
