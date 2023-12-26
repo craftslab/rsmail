@@ -19,8 +19,8 @@ use std::fs;
 use std::io::Read;
 
 use clap::{Arg, Command};
-use lettre::message::{header::ContentType, Attachment, Mailbox};
-use lettre::{Address, Message, SmtpTransport, Transport};
+use lettre::message::{header::ContentType, Attachment, Mailbox, MultiPart};
+use lettre::{Message, SmtpTransport, Transport};
 
 #[derive(serde_derive::Deserialize)]
 struct Config {
@@ -42,7 +42,8 @@ struct Mail {
     to: Vec<String>,
 }
 
-static CONTENT_TYPE_MAP: HashMap<&str, &str> = HashMap::from([("HTML", "text/html"), ("PLAIN_TEXT", "text/plain")]);
+static CONTENT_TYPE_MAP: HashMap<&str, &str> =
+    HashMap::from([("HTML", "text/html"), ("PLAIN_TEXT", "text/plain")]);
 
 fn main() -> Result<(), Box<dyn Error>> {
     let app = Command::new("mail sender")
@@ -118,7 +119,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let header = app.get_one("header").unwrap_or(&default);
 
     let p = app.get_one("recipients").unwrap_or(&default);
-    let (cc, to) = parse_recipients(&config, p)?;
+    let (cc, to) = parse_recipients(&config, p);
     if cc.len() == 0 && to.len() == 0 {
         return Err(Box::from("failed to parse recipients"));
     }
@@ -131,7 +132,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         cc,
         content_type,
         from: header.to_string(),
-        subject: title.into_string(),
+        subject: title.to_string(),
         to,
     };
 
@@ -156,7 +157,11 @@ fn parse_attachment(config: &Config, name: &String) -> Result<Vec<String>, Box<d
         return Ok(names);
     }
 
-    let mut buf = name.split(config.sep.to_owned()).map(|s| s.to_string()).collect();
+    let mut buf: Vec<String> = name
+        .split(&(config.sep).to_owned())
+        .map(|s| s.to_string())
+        .collect();
+
     for item in &mut buf {
         *item = check_file(item)?;
     }
@@ -177,7 +182,7 @@ fn parse_body(data: &String) -> Result<String, Box<dyn Error>> {
 }
 
 fn parse_content_type(data: &String) -> Result<String, Box<dyn Error>> {
-    match CONTENT_TYPE_MAP.get(data) {
+    match CONTENT_TYPE_MAP.get(data.as_str()) {
         Some(buf) => Ok(buf.to_string()),
         None => Err("content type invalid".into()),
     }
@@ -208,7 +213,6 @@ fn parse_recipients(config: &Config, data: &String) -> (Vec<String>, Vec<String>
 }
 
 fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
-    // TODO: FIXME
     let mut email = Message::builder()
         .from(config.sender.parse()?)
         .to(mail
@@ -225,14 +229,15 @@ fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
         .body(mail.body.clone())
         .unwrap();
 
-    let t = mail.content_type.parse().unwrap();
+    let t = mail.content_type.as_str();
     let content_type = ContentType::parse(t).unwrap();
+
+    let mut multi_part = MultiPart::builder();
 
     for item in &mail.attachment {
         let body = fs::read(item)?;
-        let attachment = Attachment::new((*item.into_string()).body(body, content_type.to_owned());
-
-        email.add_attachment(attachment);
+        let attachment = Attachment::new((*item).to_string()).body(body, content_type.to_owned());
+        multi_part.singlepart(attachment);
     }
 
     let creds = lettre::transport::smtp::authentication::Credentials::new(
@@ -246,7 +251,10 @@ fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
         .credentials(creds)
         .build();
 
-    return mailer.send(&email);
+    match mailer.send(&email) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(Box::try_from(e).unwrap()),
+    }
 }
 
 fn check_file(name: &String) -> Result<String, Box<dyn Error>> {
@@ -291,10 +299,7 @@ fn remove_duplicates(data: Vec<String>) -> Vec<String> {
     return buf;
 }
 
-fn collect_difference(
-    data: Vec<String>,
-    other: Vec<String>,
-) -> Vec<String> {
+fn collect_difference(data: Vec<String>, other: Vec<String>) -> Vec<String> {
     let mut buf = Vec::new();
     let mut key = Vec::new();
 
