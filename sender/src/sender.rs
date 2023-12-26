@@ -19,6 +19,7 @@ use std::fs;
 use std::io::Read;
 
 use clap::{Arg, Command};
+use lazy_static::lazy_static;
 use lettre::message::{header::ContentType, Attachment, Mailbox, MultiPart};
 use lettre::{Message, SmtpTransport, Transport};
 
@@ -42,8 +43,14 @@ struct Mail {
     to: Vec<String>,
 }
 
-static CONTENT_TYPE_MAP: HashMap<&str, &str> =
-    HashMap::from([("HTML", "text/html"), ("PLAIN_TEXT", "text/plain")]);
+lazy_static! {
+    static ref CONTENT_TYPE_MAP: HashMap<&'static str, &'static str> = {
+        let mut m = HashMap::new();
+        m.insert("HTML", "text/html");
+        m.insert("PLAIN_TEXT", "text/plain");
+        m
+    };
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let app = Command::new("mail sender")
