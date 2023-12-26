@@ -53,11 +53,11 @@ fn test_send_mail() {
     let mail = Mail {
         attachments: vec!["../test/attach1.txt", "../test/attach2.text"],
         body: "../test/body.txt",
-        cc: vec!["catherine@example.com"],
+        cc: vec!["catherine@example.com", "douglas@example.com"],
         content_type: "PLAIN_TEXT",
         from: "FROM",
         subject: "SUBJECT",
-        to: vec!["alen@example.com, bob@example.com"],
+        to: vec!["alen@example.com", "bob@example.com"],
     };
     assert!(send_mail(&config, &mail).is_ok());
 }

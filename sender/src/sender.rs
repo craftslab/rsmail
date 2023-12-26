@@ -207,24 +207,16 @@ fn parse_recipients(config: &Config, data: &String) -> (Vec<String>, Vec<String>
 
     cc = remove_duplicates(cc);
     to = remove_duplicates(to);
-    cc = collect_difference(cc, to);
+    cc = collect_difference(cc, to.to_owned());
 
     return (cc, to);
 }
 
 fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
-    let mut email = Message::builder()
+    let email = Message::builder()
         .from(config.sender.parse()?)
-        .to(mail
-            .to
-            .iter()
-            .map(|to| Mailbox::new(None, to.parse().unwrap()))
-            .collect::<Vec<_>>())
-        .cc(mail
-            .cc
-            .iter()
-            .map(|cc| Mailbox::new(None, cc.parse().unwrap()))
-            .collect::<Vec<_>>())
+        .to(Mailbox::new(None, mail.to[0].parse().unwrap()))
+        .cc(Mailbox::new(None, mail.cc[0].parse().unwrap()))
         .subject(&mail.subject)
         .body(mail.body.clone())
         .unwrap();
@@ -232,12 +224,12 @@ fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
     let t = mail.content_type.as_str();
     let content_type = ContentType::parse(t).unwrap();
 
-    let mut multi_part = MultiPart::builder();
+    let multi_part = MultiPart::builder();
 
     for item in &mail.attachment {
         let body = fs::read(item)?;
         let attachment = Attachment::new((*item).to_string()).body(body, content_type.to_owned());
-        multi_part.singlepart(attachment);
+        multi_part.clone().singlepart(attachment);
     }
 
     let creds = lettre::transport::smtp::authentication::Credentials::new(
