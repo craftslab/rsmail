@@ -94,7 +94,18 @@ Options:
 ```
 
 ```bash
-TBD
+Usage: sender [OPTIONS] --recipients <LIST>
+
+Options:
+  -a, --attachment <NAME>    Attachment files (attach1,attach2)
+  -b, --body <TEXT_OR_NAME>  Body text or file
+  -c, --config <NAME>        Config file (.json)
+  -e, --content_type <TYPE>  Content type (HTML or PLAIN_TEXT) [default: PLAIN_TEXT]
+  -r, --header <TEXT>        Header text
+  -p, --recipients <LIST>    Recipients list (alen@example.com,cc:bob@example.com)
+  -t, --title <TEXT>         Title text
+  -h, --help                 Print help
+  -V, --version              Print version
 ```
 
 
