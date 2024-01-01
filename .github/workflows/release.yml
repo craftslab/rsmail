@@ -19,7 +19,7 @@ jobs:
           toolchain: stable
           override: true
       - name: Install
-        run: make install
+        run: cd parser; make install
       - name: Build parser
         run: cd parser; make build
       - name: Build sender
