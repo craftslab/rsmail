@@ -20,7 +20,7 @@ use std::io::Read;
 
 use clap::{Arg, Command};
 use lazy_static::lazy_static;
-use lettre::message::{header::ContentType, Attachment, Mailbox, MultiPart};
+use lettre::message::{header::ContentType, Attachment, Mailbox, Mailboxes, MultiPart, SinglePart};
 use lettre::{Message, SmtpTransport, Transport};
 
 #[derive(serde_derive::Deserialize)]
@@ -220,25 +220,37 @@ fn parse_recipients(config: &Config, data: &str) -> (Vec<String>, Vec<String>) {
 }
 
 fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
-    // TODO: FIXME
-    let email = Message::builder()
-        .from(config.sender.parse()?)
-        .to(Mailbox::new(None, mail.to[0].parse().unwrap()))
-        .cc(Mailbox::new(None, mail.cc[0].parse().unwrap()))
-        .subject(&mail.subject)
-        .body(mail.body.clone())
-        .unwrap();
-
-    let t = mail.content_type.as_str();
-    let content_type = ContentType::parse(t).unwrap();
-
-    let multi_part = MultiPart::builder();
+    let content_type = ContentType::parse(mail.content_type.as_str())?;
+    let body = SinglePart::builder()
+        .header(content_type.clone())
+        .body(mail.body.clone());
+    let multi_part = MultiPart::builder().singlepart(body);
 
     for item in &mail.attachment {
         let body = fs::read(item)?;
-        let attachment = Attachment::new((*item).to_string()).body(body, content_type.to_owned());
-        multi_part.clone().singlepart(attachment);
+        let attachment = Attachment::new((*item).to_string()).body(body, content_type.clone());
+        multi_part.to_owned().singlepart(attachment);
     }
+
+    let mut to = Mailboxes::new();
+
+    for item in mail.to.to_owned() {
+        to.push(Mailbox::new(None, item.parse()?))
+    }
+
+    let mut cc = Mailboxes::new();
+
+    for item in mail.cc.to_owned() {
+        cc.push(Mailbox::new(None, item.parse()?))
+    }
+
+    let message = Message::builder()
+        .from(config.sender.parse()?)
+        .to(to.into_single().unwrap())
+        .cc(cc.into_single().unwrap())
+        .sender(mail.from.parse()?)
+        .subject(&mail.subject)
+        .multipart(multi_part)?;
 
     let creds = lettre::transport::smtp::authentication::Credentials::new(
         config.user.clone(),
@@ -251,7 +263,7 @@ fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
         .credentials(creds)
         .build();
 
-    match mailer.send(&email) {
+    match mailer.send(&message) {
         Ok(_) => Ok(()),
         Err(e) => Err(Box::try_from(e).unwrap()),
     }
