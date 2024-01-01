@@ -1,8 +1,8 @@
 {
-  "host": "smtp.example.com",
-  "pass": "pass",
+  "host": "localhost",
   "port": 25,
-  "sender": "mail@example.com",
-  "sep": ",",
-  "user": "user"
+  "user": "",
+  "pass": "",
+  "sender": "sender@example.com",
+  "sep": ","
 }

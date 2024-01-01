@@ -110,6 +110,16 @@ Options:
 
 
 
+## Test
+
+```bash
+# port 25: SMTP
+# port 8025: Web UI
+docker run --rm --name=mailpit -p 25:1025 -p 8025:8025 axllent/mailpit:latest
+```
+
+
+
 ## License
 
 Project License can be found [here](LICENSE).
@@ -119,4 +129,6 @@ Project License can be found [here](LICENSE).
 ## Reference
 
 - [gomail](https://github.com/craftslab/gomail)
+- [mailpit](https://mailpit.axllent.org/)
+- [mailpit-deploy](https://gist.github.com/craftslab/ae9d77c4e7aa0887f1a8091023d88463)
 - [rsproxy](https://rsproxy.cn/)
