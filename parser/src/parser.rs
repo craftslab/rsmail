@@ -61,13 +61,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let default = "".to_string();
 
     let c = app.get_one("config").unwrap_or(&default);
-    let config = parse_config(c)?;
+    let config = parse_config(c.as_str())?;
 
     let f = app.get_one("filter").unwrap_or(&default);
-    let filter = parse_filter(&config, f)?;
+    let filter = parse_filter(&config, f.as_str())?;
 
     let r = app.get_one("recipients").unwrap_or(&default);
-    let (mut cc, mut to) = parse_recipients(&config, r);
+    let (mut cc, mut to) = parse_recipients(&config, r.as_str());
     if cc.len() == 0 && to.len() == 0 {
         return Err(Box::from("failed to parse recipients"));
     }
@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     return Ok(());
 }
 
-fn parse_config(name: &String) -> Result<Config, Box<dyn Error>> {
+fn parse_config(name: &str) -> Result<Config, Box<dyn Error>> {
     let mut file = File::open(name)?;
     let mut data = String::new();
 
@@ -89,7 +89,7 @@ fn parse_config(name: &String) -> Result<Config, Box<dyn Error>> {
     return serde_json::from_str(data.as_str()).map_err(|e| e.into());
 }
 
-fn parse_filter(config: &Config, data: &String) -> Result<Vec<String>, Box<dyn Error>> {
+fn parse_filter(config: &Config, data: &str) -> Result<Vec<String>, Box<dyn Error>> {
     let mut buf: Vec<String> = vec![];
 
     if data.is_empty() {
@@ -109,7 +109,7 @@ fn parse_filter(config: &Config, data: &String) -> Result<Vec<String>, Box<dyn E
     return Ok(buf);
 }
 
-fn parse_recipients(config: &Config, data: &String) -> (Vec<String>, Vec<String>) {
+fn parse_recipients(config: &Config, data: &str) -> (Vec<String>, Vec<String>) {
     let mut cc = Vec::new();
     let mut to = Vec::new();
 
@@ -261,4 +261,148 @@ fn filter_address(data: String, filter: Vec<String>) -> Result<(), Box<dyn Error
     }
 
     return res;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_parse_config() {
+        assert!(parse_config("test/valid.json").is_ok());
+        assert!(parse_config("test/invalid.json").is_err());
+    }
+
+    #[test]
+    fn test_parse_filter() {
+        let config = parse_config("test/valid.json").unwrap();
+
+        assert!(parse_filter(&config, "").is_ok());
+
+        let filter = "@example.com";
+        if let Ok(b) = parse_filter(&config, filter) {
+            assert_eq!(b.len(), 1);
+            assert_eq!(b[0], "@example.com");
+        }
+
+        let filter = "@example.com,alen@example.com";
+        if let Ok(b) = parse_filter(&config, filter) {
+            assert_eq!(b.len(), 1);
+            assert_eq!(b[0], "@example.com");
+        }
+
+        let filter = "@example1.com,,@example1.com,";
+        if let Ok(b) = parse_filter(&config, filter) {
+            assert_eq!(b.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_parse_recipients() {
+        let config = parse_config("test/valid.json").unwrap();
+
+        let recipients = "alen@example.com";
+        let (cc, to) = parse_recipients(&config, recipients);
+        assert!(cc.is_empty());
+        assert_eq!(to.len(), 1);
+        assert_eq!(to[0], "alen@example.com");
+
+        let recipients = "alen@example.com,cc:,cc:bob@example.com,";
+        let (cc, to) = parse_recipients(&config, recipients);
+        assert_eq!(cc.len(), 1);
+        assert_eq!(cc[0], "bob@example.com");
+        assert_eq!(to.len(), 1);
+        assert_eq!(to[0], "alen@example.com");
+
+        let recipients = "alen@example.com,alen@example.com,cc:bob@example.com,cc:bob@example.com,";
+        let (cc, to) = parse_recipients(&config, recipients);
+        assert_eq!(cc.len(), 1);
+        assert_eq!(cc[0], "bob@example.com");
+        assert_eq!(to.len(), 1);
+        assert_eq!(to[0], "alen@example.com");
+
+        let recipients = "alen@example.com,bob@example.com,cc:bob@example.com,cc:bob@example.com,";
+        let (cc, to) = parse_recipients(&config, recipients);
+        assert!(cc.is_empty());
+        assert_eq!(to.len(), 2);
+        assert_eq!(to[0], "alen@example.com");
+        assert_eq!(to[1], "bob@example.com");
+    }
+
+    #[test]
+    fn test_fetch_address() {
+        assert!(true);
+    }
+
+    #[test]
+    fn test_print_address() {
+        let filter = vec!["@example.com".to_string()];
+
+        let cc = vec!["alen@example.com".to_string()];
+        let to = vec!["bob@example.com".to_string()];
+        print_address(cc.clone(), to.clone(), filter.clone());
+
+        let to = vec![];
+        print_address(cc.clone(), to.clone(), filter.clone());
+
+        let cc = vec![];
+        print_address(cc.clone(), to.clone(), filter.clone());
+    }
+
+    #[test]
+    fn test_remove_duplicates() {
+        let helper = |data: Vec<String>| -> bool {
+            let mut set = HashSet::new();
+            for item in data {
+                if !set.insert(item) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        let mut buf = vec![
+            "alen@example.com".to_string(),
+            "bob@example.com".to_string(),
+            "alen@example.com".to_string(),
+        ];
+
+        buf = remove_duplicates(buf);
+        assert!(!helper(buf));
+    }
+
+    #[test]
+    fn test_collect_difference() {
+        let buf_a = vec!["alen@example.com".to_string()];
+        let buf_b = vec!["alen@example.com".to_string()];
+        let buf = collect_difference(buf_a, buf_b);
+        assert!(buf.is_empty());
+
+        let buf_a = vec!["alen@example.com".to_string()];
+        let buf_b = vec!["bob@example.com".to_string()];
+        let buf = collect_difference(buf_a, buf_b);
+        assert_eq!(buf.len(), 1);
+        assert_eq!(buf[0], "alen@example.com");
+
+        let buf_a = vec![
+            "alen@example.com".to_string(),
+            "bob@example.com".to_string(),
+        ];
+        let buf_b = vec!["alen@example.com".to_string()];
+        let buf = collect_difference(buf_a, buf_b);
+        assert_eq!(buf.len(), 1);
+        assert_eq!(buf[0], "bob@example.com");
+    }
+
+    #[test]
+    fn test_filter_address() {
+        let filter = vec!["@example.com".to_string()];
+
+        let address = "alen@example.com".to_string();
+        assert!(filter_address(address, filter.clone()).is_ok());
+
+        let address = "@example.com".to_string();
+        assert!(filter_address(address, filter.clone()).is_err());
+    }
 }

@@ -1,0 +1,7 @@
+{
+  "base": "DC=intra",
+  "host": "ldap://localhost",
+  "pass": "pass",
+  "port": 389,
+  "sep": ",",
+  "user": "user"
