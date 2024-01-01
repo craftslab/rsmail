@@ -4,7 +4,7 @@
 name = "sender"
 version = "1.0.0"
 edition = "2021"
-rust-version = "1.74.1"
+rust-version = "1.75.0"
 authors = ["Jia Jia <angersax@sina.com>"]
 include = [
     "src/**/*",

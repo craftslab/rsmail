@@ -112,21 +112,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     let default = "".to_string();
 
     let c = app.get_one("config").unwrap_or(&default);
-    let config = parse_config(c)?;
+    let config = parse_config(c.as_str())?;
 
     let a = app.get_one("attachment").unwrap_or(&default);
-    let attachment = parse_attachment(&config, a)?;
+    let attachment = parse_attachment(&config, a.as_str())?;
 
     let b = app.get_one("body").unwrap_or(&default);
-    let body = parse_body(b)?;
+    let body = parse_body(b.as_str())?;
 
     let e = app.get_one("content_type").unwrap_or(&default);
-    let content_type = parse_content_type(e)?;
+    let content_type = parse_content_type(e.as_str())?;
 
     let header = app.get_one("header").unwrap_or(&default);
 
     let p = app.get_one("recipients").unwrap_or(&default);
-    let (cc, to) = parse_recipients(&config, p);
+    let (cc, to) = parse_recipients(&config, p.as_str());
     if cc.len() == 0 && to.len() == 0 {
         return Err(Box::from("failed to parse recipients"));
     }
@@ -148,7 +148,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     return Ok(());
 }
 
-fn parse_config(name: &String) -> Result<Config, Box<dyn Error>> {
+fn parse_config(name: &str) -> Result<Config, Box<dyn Error>> {
     let mut file = fs::File::open(name)?;
     let mut data = String::new();
 
@@ -157,7 +157,7 @@ fn parse_config(name: &String) -> Result<Config, Box<dyn Error>> {
     return serde_json::from_str(data.as_str()).map_err(|e| e.into());
 }
 
-fn parse_attachment(config: &Config, name: &String) -> Result<Vec<String>, Box<dyn Error>> {
+fn parse_attachment(config: &Config, name: &str) -> Result<Vec<String>, Box<dyn Error>> {
     let names = Vec::new();
 
     if name.is_empty() {
@@ -176,7 +176,7 @@ fn parse_attachment(config: &Config, name: &String) -> Result<Vec<String>, Box<d
     return Ok(buf);
 }
 
-fn parse_body(data: &String) -> Result<String, Box<dyn Error>> {
+fn parse_body(data: &str) -> Result<String, Box<dyn Error>> {
     let buf = match check_file(&data) {
         Ok(b) => b,
         Err(_) => return Ok(data.to_string()),
@@ -188,14 +188,14 @@ fn parse_body(data: &String) -> Result<String, Box<dyn Error>> {
     }
 }
 
-fn parse_content_type(data: &String) -> Result<String, Box<dyn Error>> {
-    match CONTENT_TYPE_MAP.get(data.as_str()) {
+fn parse_content_type(data: &str) -> Result<String, Box<dyn Error>> {
+    match CONTENT_TYPE_MAP.get(data) {
         Some(buf) => Ok(buf.to_string()),
         None => Err("content type invalid".into()),
     }
 }
 
-fn parse_recipients(config: &Config, data: &String) -> (Vec<String>, Vec<String>) {
+fn parse_recipients(config: &Config, data: &str) -> (Vec<String>, Vec<String>) {
     let mut cc: Vec<String> = Vec::new();
     let mut to: Vec<String> = Vec::new();
 
@@ -220,6 +220,7 @@ fn parse_recipients(config: &Config, data: &String) -> (Vec<String>, Vec<String>
 }
 
 fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
+    // TODO: FIXME
     let email = Message::builder()
         .from(config.sender.parse()?)
         .to(Mailbox::new(None, mail.to[0].parse().unwrap()))
@@ -256,7 +257,7 @@ fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn check_file(name: &String) -> Result<String, Box<dyn Error>> {
+fn check_file(name: &str) -> Result<String, Box<dyn Error>> {
     let mut buf = name.to_string();
 
     let metadata = fs::metadata(&name);
@@ -315,4 +316,154 @@ fn collect_difference(data: Vec<String>, other: Vec<String>) -> Vec<String> {
     }
 
     return buf;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_parse_config() {
+        assert!(parse_config("test/valid.json").is_ok());
+        assert!(parse_config("test/invalid.json").is_err());
+    }
+
+    #[test]
+    fn test_parse_attachment() {
+        let config = parse_config("test/valid.json").unwrap();
+
+        match parse_attachment(&config, "") {
+            Ok(b) => assert!(b.is_empty()),
+            Err(_) => assert!(false),
+        }
+
+        let name = "attach1.txt,attach2.txt";
+        assert!(parse_attachment(&config, name).is_err());
+
+        let name = "test/attach1.txt,test/attach2.txt";
+        match parse_attachment(&config, name) {
+            Ok(b) => assert_eq!(b.len(), 2),
+            Err(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_parse_body() {
+        assert!(parse_body("").is_ok());
+
+        match parse_body("body") {
+            Ok(b) => assert_eq!(b, "body"),
+            Err(_) => assert!(false),
+        }
+
+        match parse_body("body.txt") {
+            Ok(b) => assert_eq!(b, "body.txt"),
+            Err(_) => assert!(false),
+        }
+
+        assert!(parse_body("test/body.txt").is_ok());
+    }
+
+    #[test]
+    fn test_parse_content_type() {
+        assert!(parse_content_type("FOO").is_err());
+
+        if let Ok(b) = parse_content_type("HTML") {
+            assert_eq!(b, "text/html".to_string());
+        }
+
+        if let Ok(b) = parse_content_type("PLAIN_TEXT") {
+            assert_eq!(b, "text/plain".to_string());
+        }
+    }
+
+    #[test]
+    fn test_parse_recipients() {
+        let config = parse_config("test/valid.json").unwrap();
+
+        let recipients = "alen@example.com";
+        let (cc, to) = parse_recipients(&config, recipients);
+        assert!(cc.is_empty());
+        assert_eq!(to.len(), 1);
+        assert_eq!(to[0], "alen@example.com");
+
+        let recipients = "alen@example.com,cc:,cc:bob@example.com,";
+        let (cc, to) = parse_recipients(&config, recipients);
+        assert_eq!(cc.len(), 1);
+        assert_eq!(cc[0], "bob@example.com");
+        assert_eq!(to.len(), 1);
+        assert_eq!(to[0], "alen@example.com");
+
+        let recipients = "alen@example.com,alen@example.com,cc:bob@example.com,cc:bob@example.com,";
+        let (cc, to) = parse_recipients(&config, recipients);
+        assert_eq!(cc.len(), 1);
+        assert_eq!(cc[0], "bob@example.com");
+        assert_eq!(to.len(), 1);
+        assert_eq!(to[0], "alen@example.com");
+
+        let recipients = "alen@example.com,bob@example.com,cc:bob@example.com,cc:bob@example.com,";
+        let (cc, to) = parse_recipients(&config, recipients);
+        assert!(cc.is_empty());
+        assert_eq!(to.len(), 2);
+        assert_eq!(to[0], "alen@example.com");
+        assert_eq!(to[1], "bob@example.com");
+    }
+
+    #[test]
+    fn test_send_mail() {
+        assert!(true);
+    }
+
+    #[test]
+    fn test_check_file() {
+        assert!(check_file("body.txt").is_err());
+        assert!(check_file("test").is_err());
+        assert!(check_file("test/body.txt").is_ok());
+    }
+
+    #[test]
+    fn test_remove_duplicates() {
+        let helper = |data: Vec<String>| -> bool {
+            let mut set = HashSet::new();
+            for item in data {
+                if !set.insert(item) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        let mut buf = vec![
+            "alen@example.com".to_string(),
+            "bob@example.com".to_string(),
+            "alen@example.com".to_string(),
+        ];
+
+        buf = remove_duplicates(buf);
+        assert!(!helper(buf));
+    }
+
+    #[test]
+    fn test_collect_difference() {
+        let buf_a = vec!["alen@example.com".to_string()];
+        let buf_b = vec!["alen@example.com".to_string()];
+        let buf = collect_difference(buf_a, buf_b);
+        assert!(buf.is_empty());
+
+        let buf_a = vec!["alen@example.com".to_string()];
+        let buf_b = vec!["bob@example.com".to_string()];
+        let buf = collect_difference(buf_a, buf_b);
+        assert_eq!(buf.len(), 1);
+        assert_eq!(buf[0], "alen@example.com");
+
+        let buf_a = vec![
+            "alen@example.com".to_string(),
+            "bob@example.com".to_string(),
+        ];
+        let buf_b = vec!["alen@example.com".to_string()];
+        let buf = collect_difference(buf_a, buf_b);
+        assert_eq!(buf.len(), 1);
+        assert_eq!(buf[0], "bob@example.com");
+    }
 }

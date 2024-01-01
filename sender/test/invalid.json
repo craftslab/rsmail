@@ -1,0 +1,7 @@
+{
+  "host": "localhost",
+  "port": 25,
+  "user": "",
+  "pass": "",
+  "sender": "sender@example.com",
+  "sep": ","
