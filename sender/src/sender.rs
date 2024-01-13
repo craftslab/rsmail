@@ -268,13 +268,14 @@ fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
         cc.push(Mailbox::new(None, item.parse()?))
     }
 
+    // TODO: FIXME
     let message = Message::builder()
-        .from(Mailbox::new(None, config.sender.parse()?))
-        .to(to.into_single().unwrap())
-        .cc(cc.into_single().unwrap())
-        .sender(Mailbox::new(None, mail.from.parse()?))
+        .from("alice@example.org".parse().unwrap())
+        .reply_to("bob@example.org".parse().unwrap())
+        .to("carla@example.net".parse().unwrap())
         .subject(&mail.subject)
-        .multipart(multi_part)?;
+        .body("test".to_owned())
+        .unwrap();
 
     let creds = lettre::transport::smtp::authentication::Credentials::new(
         config.user.clone(),
