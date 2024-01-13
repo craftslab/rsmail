@@ -23,16 +23,17 @@ use lazy_static::lazy_static;
 use lettre::message::{header::ContentType, Attachment, Mailbox, Mailboxes, MultiPart, SinglePart};
 use lettre::{Message, SmtpTransport, Transport};
 
-#[derive(serde_derive::Deserialize)]
+#[derive(serde_derive::Deserialize, Debug)]
 struct Config {
     host: String,
-    pass: String,
     port: u16,
+    user: String,
+    pass: String,
     sender: String,
     sep: String,
-    user: String,
 }
 
+#[derive(Debug)]
 struct Mail {
     attachment: Vec<String>,
     body: String,
@@ -111,37 +112,60 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let default = "".to_string();
 
+    let mut config = Config {
+        host: "localhost".to_string(),
+        port: 25,
+        user: "".to_string(),
+        pass: "".to_string(),
+        sender: "sender@example.com".to_string(),
+        sep: ",".to_string(),
+    };
+
+    let mut mail = Mail {
+        attachment: vec![],
+        body: "".to_string(),
+        cc: vec![],
+        content_type: "".to_string(),
+        from: "".to_string(),
+        subject: "".to_string(),
+        to: vec![],
+    };
+
     let c = app.get_one("config").unwrap_or(&default);
-    let config = parse_config(c.as_str())?;
+    if let Ok(ret) = parse_config(c.as_str()) {
+        config = ret;
+    }
 
-    let a = app.get_one("attachment").unwrap_or(&default);
-    let attachment = parse_attachment(&config, a.as_str())?;
+    let attach = app.get_one("attachment").unwrap_or(&default);
+    if let Ok(a) = parse_attachment(&config, attach.as_str()) {
+        mail.attachment = a;
+    }
 
-    let b = app.get_one("body").unwrap_or(&default);
-    let body = parse_body(b.as_str())?;
+    let body = app.get_one("body").unwrap_or(&default);
+    if let Ok(b) = parse_body(body.as_str()) {
+        mail.body = b;
+    }
 
-    let e = app.get_one("content_type").unwrap_or(&default);
-    let content_type = parse_content_type(e.as_str())?;
+    let content_type = app.get_one("content_type").unwrap_or(&default);
+    if let Ok(c) = parse_content_type(content_type.as_str()) {
+        mail.content_type = c;
+    }
 
     let header = app.get_one("header").unwrap_or(&default);
+    mail.from = (*header.to_owned()).parse().unwrap();
 
-    let p = app.get_one("recipients").unwrap_or(&default);
-    let (cc, to) = parse_recipients(&config, p.as_str());
+    let recipients = app.get_one("recipients").unwrap_or(&default);
+    let (cc, to) = parse_recipients(&config, recipients.as_str());
+
     if cc.len() == 0 && to.len() == 0 {
         return Err(Box::from("failed to parse recipients"));
     }
 
-    let title = app.get_one("title").unwrap_or(&default);
+    mail.cc = cc;
+    mail.to = to;
 
-    let mail = Mail {
-        attachment,
-        body,
-        cc,
-        content_type,
-        from: header.to_string(),
-        subject: title.to_string(),
-        to,
-    };
+    let title = app.get_one("title").unwrap_or(&default);
+    mail.subject = (*title.to_owned()).parse().unwrap();
 
     send_mail(&config, &mail)?;
 
@@ -245,10 +269,10 @@ fn send_mail(config: &Config, mail: &Mail) -> Result<(), Box<dyn Error>> {
     }
 
     let message = Message::builder()
-        .from(config.sender.parse()?)
+        .from(Mailbox::new(None, config.sender.parse()?))
         .to(to.into_single().unwrap())
         .cc(cc.into_single().unwrap())
-        .sender(mail.from.parse()?)
+        .sender(Mailbox::new(None, mail.from.parse()?))
         .subject(&mail.subject)
         .multipart(multi_part)?;
 
